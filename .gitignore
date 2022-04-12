@@ -1,0 +1,9 @@
+*.o
+*.log
+myint
+myspin
+mysplit
+mystop
+tsh
+tshref
+*.json
