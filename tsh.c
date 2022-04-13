@@ -86,6 +86,11 @@ typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
 
 /*
+wrapping
+*/
+
+
+/*
  * main - The shell's main routine 
  */
 int main(int argc, char **argv) 
@@ -179,13 +184,12 @@ void eval(char *cmdline)
 		const pid_t pid = fork();
 		if(pid == 0)
 		{
-            /* puts the child in a new process group */
             setpgid(0, 0);
-
             sigprocmask(SIG_UNBLOCK, &mask, NULL);
+
 			if(execve(cmd, argv, environ) < 0)
 			{
-				unix_error("execve");
+                printf("%s: Command not found\n",cmd);
 				exit(1);
 			}
 		}
@@ -290,7 +294,6 @@ int builtin_cmd(char **argv)
     }
     else if ((strcmp("bg", argv[0])  == 0)|| (strcmp("fg", argv[0]) == 0)) 
     {
-        //call bgfg
         do_bgfg(argv);
         return 1;
     }
@@ -302,7 +305,48 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv) 
 {
-    return;
+    if (argv[1] == NULL) 
+    {
+        printf("%s command requires PID or %%jobid argument\n", argv[0]);
+        return;
+    }
+
+    const char is_initial_percent = argv[1][0] == '%';
+    if (!isdigit(argv[1][0]) && !is_initial_percent)
+    {
+        printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+        return;
+    }
+    
+    struct job_t *job;
+    if (is_initial_percent) 
+    { 
+        if ((job = getjobjid(jobs, atoi(&argv[1][1]))) == NULL) 
+        {                                 
+            printf("%s: No such job\n", argv[1]);
+            return;
+        }
+    } 
+    else 
+    {        
+        if ((job = getjobpid(jobs, (pid_t) atoi(argv[1]))) == NULL) {                                 
+            printf("(%d): No such process\n", atoi(argv[1]));
+            return;
+        }
+    }
+    
+    if(strcmp(argv[0], "bg") == 0) 
+    {
+        job->state = BG;       
+        printf("[%d] (%d) %s", job->jid, job->pid, job->cmdline);
+        kill(-job->pid, SIGCONT);                              
+    } 
+    else 
+    {
+        job->state = FG;                                            
+        kill(-job->pid, SIGCONT);                              
+        waitfg(job->pid);                                           
+    }
 }
 
 /* 
@@ -326,6 +370,7 @@ void waitfg(pid_t pid)
             }
             break;
         }
+        sleep(1);
     }
 
     return;
@@ -352,8 +397,10 @@ void sigchld_handler(int sig)
 
 	pid_t pid;
 	int status;
-	while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED))>0){
-		if(WIFEXITED(status)){
+	while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0)
+    {
+		if(WIFEXITED(status))
+        {
             if (verbose) 
             {
                 printf("%s: Job [%d] (%d) deleted\n", fn, pid2jid(pid), pid);
@@ -378,10 +425,10 @@ void sigchld_handler(int sig)
 		}
 	}
 
-    if(pid < 0 && errno != ECHILD) {
+    if(pid < 0 && errno != ECHILD) 
+    {
         unix_error("waitpid");
     }
-
     if (verbose) 
     {
         printf("%s: exiting\n", fn);
@@ -432,7 +479,9 @@ void sigtstp_handler(int sig)
 {
     const char *fn = "sigtstp_handler";
     if (verbose) 
+    {
         printf("%s: entering\n",fn);
+    }
 
     const pid_t pid = fgpid(jobs);
 	if(pid !=0)
@@ -445,7 +494,9 @@ void sigtstp_handler(int sig)
 	}
 
     if (verbose) 
+    {
         printf("%s: exiting\n",fn);
+    }
     return;
 }
 
