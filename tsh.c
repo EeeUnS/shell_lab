@@ -173,10 +173,19 @@ void eval(char *cmdline)
 
 	if(!builtin_cmd(argv))
 	{
-        sigset_t mask;
-	    sigemptyset(&mask);
-        sigaddset(&mask, SIGCHLD);
-        sigprocmask(SIG_BLOCK, &mask, NULL);
+        sigset_t mask;        
+        if (sigemptyset(&mask) < 0)
+		{
+			unix_error ("sigemptyset");
+		}
+        if (sigaddset(&mask, SIGCHLD) < 0)
+		{
+			unix_error ("sigaddset");
+		}
+        if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0)
+		{
+			unix_error ("sigprocmask");
+		}
 
 		const pid_t pid = fork();
 		if(pid == 0)
@@ -196,7 +205,11 @@ void eval(char *cmdline)
 		}
 
 		addjob(jobs, pid, !is_back_ground ? FG : BG, cmdline);
-        sigprocmask(SIG_UNBLOCK, &mask, NULL);
+        if (sigprocmask(SIG_UNBLOCK, &mask, NULL) < 0)
+		{
+			unix_error ("sigaddset");
+		}
+
 
 		if(!is_back_ground)
 		{
@@ -336,12 +349,18 @@ void do_bgfg(char **argv)
     {
         job->state = BG;       
         printf("[%d] (%d) %s", job->jid, job->pid, job->cmdline);
-        kill(-job->pid, SIGCONT);                              
+        if (kill(-job->pid, SIGCONT))
+		{
+			unix_error ("kill");
+		}
     } 
     else 
     {
-        job->state = FG;                                            
-        kill(-job->pid, SIGCONT);                              
+        job->state = FG;        
+        if (kill(-job->pid, SIGCONT))
+		{
+			unix_error ("kill");
+		}                                    
         waitfg(job->pid);                                           
     }
 }
@@ -483,7 +502,10 @@ void sigtstp_handler(int sig)
     const pid_t pid = fgpid(jobs);
 	if(pid !=0)
     {
-		kill(-pid, SIGTSTP);
+        if (kill(-pid, SIGTSTP))
+		{
+			unix_error ("kill");
+		}      
         if (verbose) 
         {
             printf("%s: Job [%d] (%d) stopped\n", fn, pid2jid(pid) , pid);
